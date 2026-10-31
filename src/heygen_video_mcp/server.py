@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 from datetime import UTC, datetime
 from decimal import Decimal
 from pathlib import Path
@@ -47,6 +48,13 @@ class Job(BaseModel):
     # Deliberately omit URLs and upstream error text from output/logs.
 
 
+class OpenRouterError(RuntimeError):
+    def __init__(self, status: int, detail: str):
+        self.status = status
+        self.detail = detail
+        super().__init__(f"OpenRouter HTTP {status}: {detail}. No automatic retry.")
+
+
 def data_dir() -> Path:
     return Path(
         os.environ.get("HEYGEN_DATA_DIR", str(Path.home() / ".heygen-video-mcp"))
@@ -73,9 +81,11 @@ async def api_json(
                 "OpenRouter transport failed; do not repeat a submission. Inspect its local receipt."
             ) from None
     if not response.is_success:
-        raise RuntimeError(
-            f"OpenRouter HTTP {response.status_code}; no automatic retry. Inspect dashboard for submission state."
-        )
+        # Keep actionable diagnostics, but never expose credentials or access-bearing URLs.
+        detail = response.text.replace(os.environ["OPENROUTER_API_KEY"], "[REDACTED]")
+        detail = re.sub(r'https?://[^\s"<>]+', "[URL REDACTED]", detail)
+        detail = re.sub(r"(?i)Bearer\s+[^\s\"<>]+", "Bearer [REDACTED]", detail)
+        raise OpenRouterError(response.status_code, detail[:2000])
     return response.json()
 
 
@@ -161,7 +171,17 @@ async def heygen_submit(
     # Exclusive reservation blocks concurrent duplicate POSTs. UNKNOWN survives transport/process failures.
     with receipt.open("x", encoding="utf-8") as file:
         json.dump(record, file, ensure_ascii=False, indent=2)
-    job = Job.model_validate(await api_json("POST", "/videos", payload))
+    try:
+        response = await api_json("POST", "/videos", payload)
+    except OpenRouterError as error:
+        record["error"] = {"http_status": error.status, "detail": error.detail}
+        temporary = receipt.with_suffix(".tmp")
+        temporary.write_text(
+            json.dumps(record, ensure_ascii=False, indent=2), encoding="utf-8"
+        )
+        temporary.replace(receipt)
+        raise
+    job = Job.model_validate(response)
     record.update({"state": "SUBMITTED", "job": job.model_dump(mode="json")})
     temporary = receipt.with_suffix(".tmp")
     temporary.write_text(

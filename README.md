@@ -48,6 +48,8 @@ For a Windows NAS/mapped-drive checkout, put the virtual environment on a local 
 
 Submission failure leaves an `UNKNOWN` receipt. Check OpenRouter activity/support before any retry; a timeout does not prove the provider rejected the job. The current API has no documented idempotency header or lookup-by-local-key endpoint. Receipts contain prompts and consent and should be kept private.
 
+HTTP failures retain their status and redacted response text in the local receipt so parameter or account errors can be diagnosed without another paid request. API keys and response URLs are removed from these diagnostics. Reconciliation and renewed approval are still required before another submission.
+
 ## Cost and feature scope
 
 This release supports **text-to-video**, 5–15 seconds, 480p/768p/2K and the six advertised aspect ratios. It validates capabilities against the live catalog. It intentionally exposes one model and no model-routing fallback. Reference inputs and separate voice generation are outside this release.

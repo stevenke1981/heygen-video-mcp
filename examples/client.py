@@ -73,8 +73,9 @@ async def run() -> None:
             )
             result = await session.call_tool("heygen_estimate", {"request": request})
         print(result.model_dump_json(indent=2))
-        if result.isError:
-            raise SystemExit(1)
+        failed = result.isError
+    if failed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

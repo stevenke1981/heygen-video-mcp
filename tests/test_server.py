@@ -1,6 +1,7 @@
 import asyncio
 import json
 import os
+import subprocess
 import sys
 from pathlib import Path
 
@@ -49,6 +50,15 @@ def api(monkeypatch, tmp_path):
         if request.method == "POST":
             if state["timeout"]:
                 raise httpx.ReadTimeout("private upstream information", request=request)
+            if state["post"] != 202:
+                return httpx.Response(
+                    state["post"],
+                    json={
+                        "error": {
+                            "message": "diagnostic test-placeholder https://example.org/private?token=secret"
+                        }
+                    },
+                )
             return httpx.Response(
                 state["post"], json={"id": "job-test", "status": "pending"}
             )
@@ -158,6 +168,21 @@ def test_missing_key_never_posts(api, monkeypatch):
     assert not api[0]
 
 
+def test_rejected_request_preserves_redacted_diagnostics(api):
+    api[1]["post"] = 400
+    with pytest.raises(server.OpenRouterError, match="HTTP 400") as raised:
+        submit()
+    assert "test-placeholder" not in str(raised.value)
+    assert "token=secret" not in str(raised.value)
+    record = server.heygen_receipt("test-v1")
+    assert record["state"] == "UNKNOWN"
+    assert record["error"]["http_status"] == 400
+    assert "diagnostic" in record["error"]["detail"]
+    assert "test-placeholder" not in json.dumps(record)
+    assert submit() == record
+    assert len([call for call in api[0] if call.method == "POST"]) == 1
+
+
 def test_status_does_not_expose_signed_urls(api):
     result = asyncio.run(server.heygen_status("job-test"))
     assert result["usage"]["cost"] == 0.09
@@ -223,3 +248,19 @@ def test_stdio_discovery_and_schema(tmp_path):
             assert not (tmp_path / "jobs").exists()
 
     asyncio.run(check())
+
+
+def test_example_error_exits_cleanly_without_credentials(tmp_path):
+    env = dict(os.environ)
+    env.pop("OPENROUTER_API_KEY", None)
+    env["HEYGEN_DATA_DIR"] = str(tmp_path)
+    result = subprocess.run(
+        [sys.executable, "examples/client.py", "--status", "job-test"],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 1
+    assert "OPENROUTER_API_KEY" in result.stdout
+    assert "ExceptionGroup" not in result.stderr
