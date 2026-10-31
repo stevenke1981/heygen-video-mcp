@@ -141,7 +141,7 @@ def test_submission_payload_and_deduplication(api):
     assert len(posts) == 1
     payload = json.loads(posts[0].content)
     assert payload["model"] == server.MODEL
-    assert payload["generate_audio"] is False
+    assert "generate_audio" not in payload
     assert payload["duration"] == 5
     assert "seed" not in payload
     assert server.heygen_receipt("test-v1")["job"]["id"] == "job-test"

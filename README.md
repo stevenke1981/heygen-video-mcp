@@ -54,7 +54,7 @@ HTTP failures retain their status and redacted response text in the local receip
 
 This release supports **text-to-video**, 5–15 seconds, 480p/768p/2K and the six advertised aspect ratios. It validates capabilities against the live catalog. It intentionally exposes one model and no model-routing fallback. Reference inputs and separate voice generation are outside this release.
 
-The current API reports `generate_audio: false`; this server explicitly requests `false` and does not promise a soundtrack. Even if the provider returns audio, listening review is separate from decoding.
+HeyGen Video 1 always renders an audio track. Its live generation endpoint rejects `generate_audio: false`, despite the discovery catalog currently advertising that value. This server therefore omits the audio toggle and uses the provider's native behavior. Ask for silence or suitable sound in the prompt; this is not a guaranteed mute control. Listening review is separate from decoding.
 
 Prices are fetched at execution time from `GET /videos/models`. On 2026-10-31, 768p was listed at $0.036/second ($0.18 for five seconds), while the web model page advertised a 50% discount. Estimates use the undiscounted SKU price. `max_cost_usd` is a **local estimate gate**, not a billing cap enforced by OpenRouter. It cannot guarantee final charges; use provider account/key spending controls as well. The consent field is a workflow record, not authentication of a human approval.
 

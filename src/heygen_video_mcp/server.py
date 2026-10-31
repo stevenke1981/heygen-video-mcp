@@ -142,7 +142,9 @@ async def heygen_submit(
     root.mkdir(parents=True, exist_ok=True)
     receipt = root / f"{request_key}.json"
     payload = request.model_dump(exclude_none=True)
-    payload.update({"model": MODEL, "generate_audio": False})
+    # HeyGen always renders an audio track; it rejects generate_audio=False,
+    # even though the discovery catalog currently reports generate_audio=False.
+    payload["model"] = MODEL
     fingerprint = hashlib.sha256(
         json.dumps(payload, sort_keys=True).encode()
     ).hexdigest()
